@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1A1840">
+<title>BPM Flash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --stage: #1A1840;
+    --stage-2: #24215A;
+    --ink: #EDEAFF;
+    --muted: #9A95D6;
+    --accent: #FFB547;   /* 1拍目 */
+    --beat: #B9B3FF;     /* 2拍目以降 */
+    --flash-ms: 120ms;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  *, *::before, *::after { box-sizing: inherit; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--stage);
+    color: var(--ink);
+    font-family: "Bricolage Grotesque", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  /* 点滅レイヤー */
+  #flash {
+    position: fixed; inset: 0;
+    background: var(--beat);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--flash-ms) ease-out;
+  }
+  #flash.on { transition: none; opacity: 1; }
+  #flash.accent { background: var(--accent); }
+
+  main {
+    position: relative; flex: 1;
+    display: grid; place-items: center;
+    padding: 24px;
+  }
+  .readout { text-align: center; position: relative; }
+  #bpmNum {
+    font-size: clamp(120px, 34vw, 340px);
+    font-weight: 800; line-height: .85;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+    transition: color var(--flash-ms) ease-out;
+  }
+  body.lit #bpmNum { color: var(--stage); transition: none; }
+  .unit { font-size: clamp(16px, 3vw, 24px); color: var(--muted); margin-top: 8px; }
+  body.lit .unit { color: var(--stage); }
+
+  .dots { display: flex; gap: 12px; justify-content: center; margin-top: 28px; }
+  .dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--muted);
+  }
+  .dot.first { border-color: var(--accent); }
+  .dot.now { background: var(--beat); border-color: var(--beat); }
+  .dot.first.now { background: var(--accent); border-color: var(--accent); }
+
+  /* 操作パネル */
+  .panel {
+    position: relative;
+    background: var(--stage-2);
+    padding: 16px 20px 20px;
+    display: flex; flex-wrap: wrap; gap: 12px 16px;
+    align-items: center; justify-content: center;
+    transition: opacity .3s;
+  }
+  body.hide-ui .panel { opacity: 0; pointer-events: none; }
+  body.hide-ui .unit, body.hide-ui .dots { visibility: hidden; }
+
+  button, select, input {
+    font: inherit; color: var(--ink);
+    background: transparent;
+    border: 2px solid var(--muted);
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  button:focus-visible, select:focus-visible, input:focus-visible {
+    outline: 3px solid var(--accent); outline-offset: 2px;
+  }
+  #startBtn {
+    background: var(--accent); color: var(--stage);
+    border-color: var(--accent); font-weight: 700;
+    min-width: 120px;
+  }
+  #startBtn.running { background: transparent; color: var(--accent); }
+  .step { display: flex; align-items: center; gap: 6px; }
+  .step button { width: 44px; height: 44px; padding: 0; }
+  #bpmInput { width: 84px; text-align: center; border-radius: 12px; }
+  select { border-radius: 12px; }
+  label.toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; cursor: pointer; }
+  label.toggle input { width: 20px; height: 20px; padding: 0; accent-color: var(--accent); }
+  .hint { width: 100%; text-align: center; color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #flash { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div id="flash"></div>
+
+  <main id="stage">
+    <div class="readout">
+      <div id="bpmNum">120</div>
+      <div class="unit">BPM</div>
+      <div class="dots" id="dots"></div>
+    </div>
+  </main>
+
+  <div class="panel">
+    <button id="startBtn" type="button">スタート</button>
+
+    <div class="step">
+      <button type="button" id="minus" aria-label="BPMを1下げる">−</button>
+      <input id="bpmInput" type="number" min="30" max="300" value="120" aria-label="BPM">
+      <button type="button" id="plus" aria-label="BPMを1上げる">＋</button>
+    </div>
+
+    <button id="tapBtn" type="button">タップ</button>
+
+    <select id="meter" aria-label="拍子">
+      <option value="1">点滅のみ</option>
+      <option value="2">2拍子</option>
+      <option value="3">3拍子</option>
+      <option value="4" selected>4拍子</option>
+      <option value="6">6拍子</option>
+      <option value="7">7拍子</option>
+    </select>
+
+    <label class="toggle"><input type="checkbox" id="sound">クリック音</label>
+    <button id="fsBtn" type="button">全画面</button>
+
+    <p class="hint">スペース：スタート／ストップ　T：タップ　↑↓：BPM ±1　H：操作パネルを隠す</p>
+  </div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const flash = $('flash'), bpmNum = $('bpmNum'), bpmInput = $('bpmInput');
+  const startBtn = $('startBtn'), meterSel = $('meter'), soundChk = $('sound'), dotsEl = $('dots');
+
+  // 保存された設定を読み込む
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('bpmflash:' + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('bpmflash:' + k, v); } catch {} }
+  };
+
+  let bpm = clamp(parseInt(store.get('bpm', 120), 10) || 120);
+  let meter = parseInt(store.get('meter', 4), 10) || 4;
+  meterSel.value = String(meter);
+  soundChk.checked = store.get('sound', '0') === '1';
+
+  let ctx = null, running = false, timerId = null;
+  let nextBeatTime = 0, beatIndex = 0;
+  const queue = []; // 画面表示用の拍 {time, beat}
+  const LOOKAHEAD = 0.1, TICK_MS = 25;
+  let wakeLock = null;
+
+  function clamp(v) { return Math.min(300, Math.max(30, v)); }
+
+  function setBpm(v) {
+    bpm = clamp(Math.round(v));
+    bpmNum.textContent = bpm;
+    bpmInput.value = bpm;
+    store.set('bpm', bpm);
+  }
+
+  function renderDots(active = -1) {
+    dotsEl.innerHTML = '';
+    if (meter < 2) return;
+    for (let i = 0; i < meter; i++) {
+      const d = document.createElement('span');
+      d.className = 'dot' + (i === 0 ? ' first' : '') + (i === active ? ' now' : '');
+      dotsEl.appendChild(d);
+    }
+  }
+
+  // クリック音（AudioContextの時計で正確にスケジュール）
+  function scheduleClick(time, accent) {
+    if (!soundChk.checked) return;
+    const osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.frequency.value = accent ? 1600 : 1000;
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(0.6, time + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(time); osc.stop(time + 0.06);
+  }
+
+  function scheduler() {
+    while (nextBeatTime < ctx.currentTime + LOOKAHEAD) {
+      const beat = meter < 2 ? 0 : beatIndex % meter;
+      scheduleClick(nextBeatTime, meter >= 2 && beat === 0);
+      queue.push({ time: nextBeatTime, beat });
+      nextBeatTime += 60 / bpm;
+      beatIndex++;
+    }
+  }
+
+  // 描画ループ：音と同じ時計を見て点滅させる
+  function draw() {
+    if (!running) return;
+    const now = ctx.currentTime;
+    let hit = null;
+    while (queue.length && queue[0].time <= now) hit = queue.shift();
+    if (hit) {
+      const accent = meter >= 2 && hit.beat === 0;
+      flash.classList.toggle('accent', accent);
+      flash.classList.add('on');
+      document.body.classList.add('lit');
+      renderDots(hit.beat);
+      // 次フレームで消灯 → CSSのtransitionでフェードアウト
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        flash.classList.remove('on');
+        document.body.classList.remove('lit');
+      }));
+    }
+    requestAnimationFrame(draw);
+  }
+
+  async function start() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+    running = true;
+    beatIndex = 0; queue.length = 0;
+    nextBeatTime = ctx.currentTime + 0.05;
+    timerId = setInterval(scheduler, TICK_MS);
+    scheduler();
+    requestAnimationFrame(draw);
+    startBtn.textContent = 'ストップ';
+    startBtn.classList.add('running');
+    requestWakeLock();
+  }
+
+  function stop() {
+    running = false;
+    clearInterval(timerId);
+    queue.length = 0;
+    flash.classList.remove('on');
+    document.body.classList.remove('lit');
+    renderDots();
+    startBtn.textContent = 'スタート';
+    startBtn.classList.remove('running');
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+  }
+
+  // 演奏中に画面がスリープしないようにする（対応ブラウザのみ）
+  async function requestWakeLock() {
+    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running) requestWakeLock();
+  });
+
+  // タップテンポ
+  let taps = [];
+  function tap() {
+    const t = performance.now();
+    if (taps.length && t - taps[taps.length - 1] > 2000) taps = [];
+    taps.push(t);
+    if (taps.length > 6) taps.shift();
+    if (taps.length >= 2) {
+      const avg = (taps[taps.length - 1] - taps[0]) / (taps.length - 1);
+      setBpm(60000 / avg);
+    }
+  }
+
+  // イベント
+  startBtn.onclick = () => running ? stop() : start();
+  $('minus').onclick = () => setBpm(bpm - 1);
+  $('plus').onclick = () => setBpm(bpm + 1);
+  $('tapBtn').onclick = tap;
+  bpmInput.onchange = () => setBpm(parseInt(bpmInput.value, 10) || bpm);
+  meterSel.onchange = () => { meter = parseInt(meterSel.value, 10); store.set('meter', meter); beatIndex = 0; renderDots(); };
+  soundChk.onchange = () => store.set('sound', soundChk.checked ? '1' : '0');
+  $('fsBtn').onclick = () => {
+    const el = document.documentElement;
+    if (!document.fullscreenElement) (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    else document.exitFullscreen?.();
+  };
+
+  document.addEventListener('keydown', e => {
+    if (e.target === bpmInput) return;
+    if (e.code === 'Space') { e.preventDefault(); running ? stop() : start(); }
+    else if (e.key === 't' || e.key === 'T') tap();
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setBpm(bpm + 1); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); setBpm(bpm - 1); }
+    else if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('hide-ui');
+  });
+
+  // 画面中央をダブルタップで操作パネルの表示切替（スマホ用）
+  let lastTouch = 0;
+  $('stage').addEventListener('click', () => {
+    const t = performance.now();
+    if (t - lastTouch < 350) document.body.classList.toggle('hide-ui');
+    lastTouch = t;
+  });
+
+  setBpm(bpm);
+  renderDots();
+})();
+</script>
+</body>
+</html>
